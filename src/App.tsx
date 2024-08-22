@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Alert, AlertDescription } from "./components/ui/alert";
+import { Spinner } from "./components/ui/spinner"; // Assume you have a Spinner component
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -14,21 +15,23 @@ const App: React.FC = () => {
   const [userShare, setUserShare] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [signature, setSignature] = useState("");
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, setLogs] = useState<Array<{ message: string; type: "info" | "error" | "success" }>>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState("");
 
   useEffect(() => {
     WebApp.ready();
-    checkExistingWallet();
+    handleAuth();
   }, []);
 
-  const log = (message: string) => {
-    setLogs((prevLogs) => [...prevLogs, message]);
+  const log = (message: string, type: "info" | "error" | "success" = "info") => {
+    setLogs((prevLogs) => [...prevLogs, { message, type }]);
   };
 
   const handleError = (errorMessage: string) => {
     setError(errorMessage);
-    log(`Error: ${errorMessage}`);
+    log(errorMessage, "error");
   };
 
   const storeWithChunking = async (
@@ -37,11 +40,9 @@ const App: React.FC = () => {
     maxRetries: number = 256
   ): Promise<number> => {
     const store = (k: CloudStorageKey, v: CloudStorageValue): Promise<void> => {
-      log(`Attempting to store "${k}"... with value length: ${v.length}`);
       return new Promise((resolve, reject) => {
         telegramCloudStorage.setItem(k, v, (error) => {
           if (error) {
-            log(`Failed to store "${k}": ${error}`);
             reject(error);
           } else resolve();
         });
@@ -62,9 +63,8 @@ const App: React.FC = () => {
 
       try {
         await store(chunkKey, subValue);
-        return 1; // Return 1 to count this successful chunk
+        return 1;
       } catch (error) {
-        // If storage fails, split the value and try again
         const midPoint = Math.ceil(subValue.length / 2);
         const leftHalf = subValue.slice(0, midPoint);
         const rightHalf = subValue.slice(midPoint);
@@ -72,17 +72,15 @@ const App: React.FC = () => {
         const leftCount = await storeRecursive(baseKey, leftHalf, chunkIndex * 2 + 1, depth + 1);
         const rightCount = await storeRecursive(baseKey, rightHalf, chunkIndex * 2 + 2, depth + 1);
 
-        // Store metadata about this split
         await store(`${chunkKey}_meta`, JSON.stringify({ split: true, chunks: leftCount + rightCount }));
 
-        return leftCount + rightCount; // Return total number of chunks created
+        return leftCount + rightCount;
       }
     };
 
     try {
       const totalChunks = await storeRecursive(key, value);
       await store(`${key}_meta`, JSON.stringify({ totalChunks }));
-      log(`Successfully stored "${key}" in ${totalChunks} chunk(s)`);
       return totalChunks;
     } catch (error) {
       handleError(`Failed to store "${key}": ${error instanceof Error ? error.message : String(error)}`);
@@ -113,7 +111,6 @@ const App: React.FC = () => {
             return leftData + rightData;
           }
         }
-        // If no metadata or not split, return the data directly
         const data = await retrieve(chunkKey);
         if (data === undefined) {
           throw new Error(`No data found for key ${chunkKey}`);
@@ -134,6 +131,7 @@ const App: React.FC = () => {
       log(`Retrieving data for "${key}" (${totalChunks} chunks)`);
       const data = await retrieveRecursive(key);
       log(`Successfully retrieved and recombined data for "${key}"`);
+
       return data;
     } catch (error) {
       handleError(`Failed to retrieve data for "${key}": ${error instanceof Error ? error.message : String(error)}`);
@@ -142,34 +140,35 @@ const App: React.FC = () => {
   };
 
   const generateWallet = async (): Promise<void> => {
+    setIsLoading(true);
+    setLoadingText("Generating wallet...");
     try {
-      log("Generating new wallet...");
       const username = WebApp.initDataUnsafe.user?.username;
       if (!username) throw new Error("Username not found");
       const pregenWallet = await capsuleClient.createWalletPreGen(
         WalletType.EVM,
         `${username + crypto.randomUUID().split("-")[0]}@test.usecapsule.com`
       );
-      log(`Wallet created with ID: ${pregenWallet.id}`);
-      log(`Wallet address: ${pregenWallet.address}`);
-      log(`Wallet pregenIdentifier: ${pregenWallet.pregenIdentifier}`);
-      const share = (await capsuleClient.getUserShare()) || "";
-      log("User share obtained");
-
-      await storeWithChunking("walletId", pregenWallet.id);
+      log(`Wallet created with ID: ${pregenWallet.id}`, "success");
       setWalletId(pregenWallet.id);
-      log("Wallet ID stored in Telegram Cloud Storage");
-
-      const userShareChunks = await storeWithChunking("userShare", share);
+      const share = (await capsuleClient.getUserShare()) || "";
       setUserShare(share);
-      log(`User share stored in Telegram Cloud Storage in ${userShareChunks} chunk(s)`);
+
+      log("Storing wallet data...", "info");
+      await storeWithChunking("walletId", pregenWallet.id);
+      await storeWithChunking("userShare", share);
+      log("Wallet data stored successfully", "success");
     } catch (error) {
       handleError(`Error generating wallet: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+      setLoadingText("");
     }
   };
 
   const checkExistingWallet = async (): Promise<void> => {
-    log("Checking for existing wallet...");
+    setIsLoading(true);
+    setLoadingText("Checking for existing wallet...");
     try {
       const walletId = await retrieveChunkedData("walletId");
       const userShare = await retrieveChunkedData("userShare");
@@ -177,22 +176,34 @@ const App: React.FC = () => {
       if (walletId && userShare) {
         setWalletId(walletId);
         setUserShare(userShare);
-        log("Existing wallet found");
+        log("Existing wallet found", "success");
       } else {
-        log("No existing wallet found");
+        log("No existing wallet found", "info");
       }
     } catch (error) {
       handleError(`Error fetching wallet data: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+      setLoadingText("");
     }
   };
 
   const handleAuth = async () => {
-    log("Attempting authentication...");
-    if (WebApp.initDataUnsafe.user) {
-      log("User authenticated: " + JSON.stringify(WebApp.initDataUnsafe.user));
-      setIsAuthenticated(true);
-    } else {
-      handleError("User data not available");
+    setIsLoading(true);
+    setLoadingText("Authenticating...");
+    try {
+      if (WebApp.initDataUnsafe.user) {
+        log("User authenticated", "success");
+        setIsAuthenticated(true);
+        await checkExistingWallet();
+      } else {
+        handleError("User data not available");
+      }
+    } catch (error) {
+      handleError(`Authentication error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+      setLoadingText("");
     }
   };
 
@@ -202,12 +213,10 @@ const App: React.FC = () => {
       return;
     }
 
+    setIsLoading(true);
+    setLoadingText("Signing message...");
     try {
-      log("Setting user share...");
       await capsuleClient.setUserShare(userShare);
-      log("User share set successfully");
-
-      log("Signing message...");
       const messageBase64 = btoa(message);
       const sig = await capsuleClient.signMessage(walletId, messageBase64);
 
@@ -215,34 +224,24 @@ const App: React.FC = () => {
         throw new Error("Error signing message");
       }
       setSignature(sig.signature);
-      log(`Message signed successfully. Signature: ${sig.signature}`);
+      log(`Message signed successfully`, "success");
     } catch (error) {
       handleError(`Error signing message: ${error}`);
+    } finally {
+      setIsLoading(false);
+      setLoadingText("");
     }
   };
 
   const logout = () => {
-    log("Logging out...");
+    log("Logging out...", "info");
     WebApp.close();
   };
 
   const clearStorage = async () => {
-    const log = (message: string) => {
-      console.log(message);
-      // You can also update your UI logs here if needed
-      // setLogs((prevLogs) => [...prevLogs, message]);
-    };
-
-    const handleError = (errorMessage: string) => {
-      console.error(errorMessage);
-      // You can also update your UI error state here if needed
-      // setError(errorMessage);
-    };
-
+    setIsLoading(true);
+    setLoadingText("Clearing storage...");
     try {
-      log("Starting storage clearing process...");
-
-      // Get all keys from storage
       const keys: string[] = await new Promise((resolve, reject) => {
         telegramCloudStorage.getKeys((error, result) => {
           if (error) reject(error);
@@ -250,9 +249,6 @@ const App: React.FC = () => {
         });
       });
 
-      log(`Found ${keys.length} keys in storage.`);
-
-      // Function to remove a single item
       const removeItem = (key: string): Promise<void> => {
         return new Promise((resolve, reject) => {
           telegramCloudStorage.removeItem(key, (error) => {
@@ -262,12 +258,8 @@ const App: React.FC = () => {
         });
       };
 
-      // Remove all keys and their associated chunks
       for (const key of keys) {
-        log(`Processing key: ${key}`);
-
         if (key.endsWith("_meta")) {
-          // This is a metadata key, remove it and its associated chunks
           const baseKey = key.replace("_meta", "");
           const metaData = await new Promise<string | undefined>((resolve, reject) => {
             telegramCloudStorage.getItem(key, (error, result) => {
@@ -278,23 +270,27 @@ const App: React.FC = () => {
 
           if (metaData) {
             const { totalChunks } = JSON.parse(metaData);
-            log(`Removing ${totalChunks} chunks for ${baseKey}`);
-
             for (let i = 0; i < totalChunks; i++) {
               await removeItem(`${baseKey}_chunk_${i}`);
               await removeItem(`${baseKey}_chunk_${i}_meta`);
             }
           }
         }
-
-        // Remove the key itself
         await removeItem(key);
-        log(`Removed key: ${key}`);
       }
 
-      log("Storage clearing process completed successfully.");
+      log("Storage cleared successfully", "success");
+      setWalletId(null);
+      setUserShare(null);
+      setMessage("");
+      setSignature("");
+      setLogs([]);
+      setError(null);
     } catch (error) {
       handleError(`Error clearing storage: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+      setLoadingText("");
     }
   };
 
@@ -304,14 +300,15 @@ const App: React.FC = () => {
         <CardHeader>
           <CardTitle>{isAuthenticated ? "Wallet Manager" : "Welcome to Capsule Wallet"}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-hidden">
           {!isAuthenticated ? (
-            <>
-              <p>Click the button below to start using the app.</p>
-              <Button onClick={handleAuth}>Start</Button>
-            </>
+            <p>Authenticating...</p>
           ) : !walletId ? (
-            <Button onClick={generateWallet}>Generate Wallet</Button>
+            <Button
+              onClick={generateWallet}
+              disabled={isLoading}>
+              {isLoading ? <Spinner /> : "Generate Wallet"}
+            </Button>
           ) : (
             <>
               <Input
@@ -322,28 +319,27 @@ const App: React.FC = () => {
               />
               <Button
                 onClick={signMessage}
-                className="mb-2">
-                Sign Message
+                className="mb-2"
+                disabled={isLoading || !message}>
+                {isLoading ? <Spinner /> : "Sign Message"}
               </Button>
-              {signature && <p className="mb-2">Signature: {signature}</p>}
+              {signature && <p className="mb-2 break-all">Signature: {signature}</p>}
               <div className="flex justify-between">
-                <Button onClick={logout}>Close App</Button>
                 <Button
-                  onClick={() => {
-                    clearStorage();
-                    setWalletId(null);
-                    setUserShare(null);
-                    setMessage("");
-                    setSignature("");
-                    setLogs([]);
-                    setError(null);
-                  }}
-                  className="ml-2">
+                  onClick={logout}
+                  disabled={isLoading}>
+                  Close App
+                </Button>
+                <Button
+                  onClick={clearStorage}
+                  className="ml-2"
+                  disabled={isLoading}>
                   Clear Storage
                 </Button>
               </div>
             </>
           )}
+          {loadingText && <p className="mt-2">{loadingText}</p>}
         </CardContent>
       </Card>
 
@@ -351,18 +347,26 @@ const App: React.FC = () => {
         <CardHeader>
           <CardTitle>App Logs</CardTitle>
         </CardHeader>
-        <CardContent>
-          {logs.map((log, index) => (
-            <p key={index}>{log}</p>
-          ))}
+        <CardContent className="overflow-auto max-h-60">
+          {logs.length === 0 ? (
+            <p>No logs yet.</p>
+          ) : (
+            logs.map((log, index) => (
+              <p
+                key={index}
+                className={`${log.type === "error" ? "text-red-500" : log.type === "success" ? "text-green-500" : ""}`}>
+                {log.message}
+              </p>
+            ))
+          )}
         </CardContent>
       </Card>
 
       {error && (
         <Alert
           variant="destructive"
-          className="mt-4 text-wrap">
-          <AlertDescription>{error}</AlertDescription>
+          className="mt-4">
+          <AlertDescription className="break-words">{error}</AlertDescription>
         </Alert>
       )}
     </div>
