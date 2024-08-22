@@ -19,7 +19,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     WebApp.ready();
-    console.log(WebApp.version);
     checkExistingWallet();
   }, []);
 
@@ -64,11 +63,13 @@ const App: React.FC = () => {
       log("Generating new wallet...");
       const username = WebApp.initDataUnsafe.user?.username;
       if (!username) throw new Error("Username not found");
-
-      const pregenWallet = await capsuleClient.createWalletPreGen(WalletType.EVM, username);
+      const pregenWallet = await capsuleClient.createWalletPreGen(WalletType.EVM, `${username}@test.usecapsule.com`);
       log(`Wallet created with ID: ${pregenWallet.id}`);
+      log(`Wallet address: ${pregenWallet.address}`);
+      log(`Wallet pregenIdentifier: ${pregenWallet.pregenIdentifier}`);
       const share = (await capsuleClient.getUserShare()) || "";
       log("User share obtained");
+      log(`Wallet share: ${share}`);
 
       telegramCloudStorage.setItem("walletId", pregenWallet.id, (error) => {
         if (error) {
