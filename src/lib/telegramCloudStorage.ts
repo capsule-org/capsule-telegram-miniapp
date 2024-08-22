@@ -1,8 +1,8 @@
 import WebApp from "@twa-dev/sdk";
 
-type CloudStorageKey = string;
-type CloudStorageValue = string;
-type CloudStorageItems = Record<CloudStorageKey, CloudStorageValue>;
+export type CloudStorageKey = string;
+export type CloudStorageValue = string;
+export type CloudStorageItems = Record<CloudStorageKey, CloudStorageValue>;
 
 export const telegramCloudStorage = {
   setItem: (

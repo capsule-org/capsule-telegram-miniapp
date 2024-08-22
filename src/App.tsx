@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import WebApp from "@twa-dev/sdk";
-import { telegramCloudStorage } from "./lib/telegramCloudStorage";
+import { CloudStorageKey, CloudStorageValue, telegramCloudStorage } from "./lib/telegramCloudStorage";
 import capsuleClient from "./lib/capsuleClient";
 import { WalletType } from "@usecapsule/web-sdk";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
@@ -31,34 +31,103 @@ const App: React.FC = () => {
     log(`Error: ${errorMessage}`);
   };
 
-  const checkExistingWallet = () => {
-    log("Checking for existing wallet...");
-    telegramCloudStorage.getItems(["walletId", "userShare"], (error, result) => {
-      if (error) {
-        handleError(`Error fetching wallet data: ${error}`);
-        return;
-      }
-      if (result && result.walletId && result.userShare) {
-        setWalletId(result.walletId);
-        setUserShare(result.userShare);
-        log("Existing wallet found");
-      } else {
-        log("No existing wallet found");
-      }
-    });
-  };
+  const storeWithChunking = async (
+    key: CloudStorageKey,
+    value: CloudStorageValue,
+    maxRetries: number = 6
+  ): Promise<number> => {
+    const store = (k: CloudStorageKey, v: CloudStorageValue): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        telegramCloudStorage.setItem(k, v, (error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    };
 
-  const handleAuth = async () => {
-    log("Attempting authentication...");
-    if (WebApp.initDataUnsafe.user) {
-      log("User authenticated: " + JSON.stringify(WebApp.initDataUnsafe.user));
-      setIsAuthenticated(true);
-    } else {
-      handleError("User data not available");
+    const storeRecursive = async (
+      subKey: CloudStorageKey,
+      subValue: CloudStorageValue,
+      depth: number = 0
+    ): Promise<number> => {
+      if (depth > maxRetries) {
+        throw new Error(`Failed to store after ${maxRetries} splitting attempts`);
+      }
+
+      try {
+        await store(subKey, subValue);
+        return 1; // Return 1 to count this successful chunk
+      } catch (error) {
+        // If storage fails, split the value and try again
+        const midPoint = Math.ceil(subValue.length / 2);
+        const leftHalf = subValue.slice(0, midPoint);
+        const rightHalf = subValue.slice(midPoint);
+
+        const leftCount = await storeRecursive(`${subKey}:L`, leftHalf, depth + 1);
+        const rightCount = await storeRecursive(`${subKey}:R`, rightHalf, depth + 1);
+
+        // Store metadata about this split
+        await store(`${subKey}:meta`, JSON.stringify({ split: true, chunks: leftCount + rightCount }));
+
+        return leftCount + rightCount; // Return total number of chunks created
+      }
+    };
+
+    try {
+      const totalChunks = await storeRecursive(key, value);
+      log(`Successfully stored "${key}" in ${totalChunks} chunk(s)`);
+      return totalChunks;
+    } catch (error) {
+      handleError(`Failed to store "${key}": ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
     }
   };
 
-  const generateWallet = async () => {
+  // Function to retrieve and recombine chunked data
+  const retrieveChunkedData = async (key: CloudStorageKey): Promise<CloudStorageValue> => {
+    const retrieve = (k: CloudStorageKey): Promise<CloudStorageValue | undefined> => {
+      return new Promise((resolve, reject) => {
+        telegramCloudStorage.getItem(k, (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        });
+      });
+    };
+
+    const retrieveRecursive = async (subKey: CloudStorageKey): Promise<CloudStorageValue> => {
+      try {
+        const metaData = await retrieve(`${subKey}:meta`);
+        if (metaData) {
+          const { split, chunks } = JSON.parse(metaData) as { split: boolean; chunks: number };
+          if (split) {
+            const leftData = await retrieveRecursive(`${subKey}:L`);
+            const rightData = await retrieveRecursive(`${subKey}:R`);
+            return leftData + rightData;
+          }
+        }
+        // If no metadata or not split, return the data directly
+        const data = await retrieve(subKey);
+        if (data === undefined) {
+          throw new Error(`No data found for key ${subKey}`);
+        }
+        return data;
+      } catch (error) {
+        handleError(`Error retrieving chunk ${subKey}: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+    };
+
+    try {
+      const data = await retrieveRecursive(key);
+      log(`Successfully retrieved and recombined data for "${key}"`);
+      return data;
+    } catch (error) {
+      handleError(`Failed to retrieve data for "${key}": ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  };
+
+  const generateWallet = async (): Promise<void> => {
     try {
       log("Generating new wallet...");
       const username = WebApp.initDataUnsafe.user?.username;
@@ -69,27 +138,45 @@ const App: React.FC = () => {
       log(`Wallet pregenIdentifier: ${pregenWallet.pregenIdentifier}`);
       const share = (await capsuleClient.getUserShare()) || "";
       log("User share obtained");
-      log(`Wallet share: ${share}`);
 
-      telegramCloudStorage.setItem("walletId", pregenWallet.id, (error) => {
-        if (error) {
-          handleError(`Error storing wallet ID: ${error}`);
-          return;
-        }
-        setWalletId(pregenWallet.id);
-        log("Wallet ID stored in Telegram Cloud Storage");
-      });
+      await storeWithChunking("walletId", pregenWallet.id);
+      setWalletId(pregenWallet.id);
+      log("Wallet ID stored in Telegram Cloud Storage");
 
-      telegramCloudStorage.setItem("userShare", share, (error) => {
-        if (error) {
-          handleError(`Error storing user share: ${error}`);
-          return;
-        }
-        setUserShare(share);
-        log("User share stored in Telegram Cloud Storage");
-      });
+      const userShareChunks = await storeWithChunking("userShare", share);
+      setUserShare(share);
+      log(`User share stored in Telegram Cloud Storage in ${userShareChunks} chunk(s)`);
     } catch (error) {
-      handleError(`Error generating wallet: ${error}`);
+      handleError(`Error generating wallet: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  // Modified checkExistingWallet function
+  const checkExistingWallet = async (): Promise<void> => {
+    log("Checking for existing wallet...");
+    try {
+      const walletId = await retrieveChunkedData("walletId");
+      const userShare = await retrieveChunkedData("userShare");
+
+      if (walletId && userShare) {
+        setWalletId(walletId);
+        setUserShare(userShare);
+        log("Existing wallet found");
+      } else {
+        log("No existing wallet found");
+      }
+    } catch (error) {
+      handleError(`Error fetching wallet data: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const handleAuth = async () => {
+    log("Attempting authentication...");
+    if (WebApp.initDataUnsafe.user) {
+      log("User authenticated: " + JSON.stringify(WebApp.initDataUnsafe.user));
+      setIsAuthenticated(true);
+    } else {
+      handleError("User data not available");
     }
   };
 
