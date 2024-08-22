@@ -226,6 +226,78 @@ const App: React.FC = () => {
     WebApp.close();
   };
 
+  const clearStorage = async () => {
+    const log = (message: string) => {
+      console.log(message);
+      // You can also update your UI logs here if needed
+      // setLogs((prevLogs) => [...prevLogs, message]);
+    };
+
+    const handleError = (errorMessage: string) => {
+      console.error(errorMessage);
+      // You can also update your UI error state here if needed
+      // setError(errorMessage);
+    };
+
+    try {
+      log("Starting storage clearing process...");
+
+      // Get all keys from storage
+      const keys: string[] = await new Promise((resolve, reject) => {
+        telegramCloudStorage.getKeys((error, result) => {
+          if (error) reject(error);
+          else resolve(result || []);
+        });
+      });
+
+      log(`Found ${keys.length} keys in storage.`);
+
+      // Function to remove a single item
+      const removeItem = (key: string): Promise<void> => {
+        return new Promise((resolve, reject) => {
+          telegramCloudStorage.removeItem(key, (error) => {
+            if (error) reject(error);
+            else resolve();
+          });
+        });
+      };
+
+      // Remove all keys and their associated chunks
+      for (const key of keys) {
+        log(`Processing key: ${key}`);
+
+        if (key.endsWith("_meta")) {
+          // This is a metadata key, remove it and its associated chunks
+          const baseKey = key.replace("_meta", "");
+          const metaData = await new Promise<string | undefined>((resolve, reject) => {
+            telegramCloudStorage.getItem(key, (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            });
+          });
+
+          if (metaData) {
+            const { totalChunks } = JSON.parse(metaData);
+            log(`Removing ${totalChunks} chunks for ${baseKey}`);
+
+            for (let i = 0; i < totalChunks; i++) {
+              await removeItem(`${baseKey}_chunk_${i}`);
+              await removeItem(`${baseKey}_chunk_${i}_meta`);
+            }
+          }
+        }
+
+        // Remove the key itself
+        await removeItem(key);
+        log(`Removed key: ${key}`);
+      }
+
+      log("Storage clearing process completed successfully.");
+    } catch (error) {
+      handleError(`Error clearing storage: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   return (
     <div className="container mx-auto p-4">
       <Card className="mb-4">
@@ -254,7 +326,22 @@ const App: React.FC = () => {
                 Sign Message
               </Button>
               {signature && <p className="mb-2">Signature: {signature}</p>}
-              <Button onClick={logout}>Logout</Button>
+              <div>
+                <Button onClick={logout}>Logout</Button>
+                <Button
+                  onClick={() => {
+                    clearStorage();
+                    setWalletId(null);
+                    setUserShare(null);
+                    setMessage("");
+                    setSignature("");
+                    setLogs([]);
+                    setError(null);
+                  }}
+                  className="ml-2">
+                  Clear Storage
+                </Button>
+              </div>
             </>
           )}
         </CardContent>
