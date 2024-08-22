@@ -132,7 +132,10 @@ const App: React.FC = () => {
       log("Generating new wallet...");
       const username = WebApp.initDataUnsafe.user?.username;
       if (!username) throw new Error("Username not found");
-      const pregenWallet = await capsuleClient.createWalletPreGen(WalletType.EVM, `${username}@test.usecapsule.com`);
+      const pregenWallet = await capsuleClient.createWalletPreGen(
+        WalletType.EVM,
+        `${username + crypto.randomUUID().split("-")[0]}@test.usecapsule.com`
+      );
       log(`Wallet created with ID: ${pregenWallet.id}`);
       log(`Wallet address: ${pregenWallet.address}`);
       log(`Wallet pregenIdentifier: ${pregenWallet.pregenIdentifier}`);
