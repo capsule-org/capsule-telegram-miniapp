@@ -34,13 +34,16 @@ const App: React.FC = () => {
   const storeWithChunking = async (
     key: CloudStorageKey,
     value: CloudStorageValue,
-    maxRetries: number = 6
+    maxRetries: number = 256
   ): Promise<number> => {
     const store = (k: CloudStorageKey, v: CloudStorageValue): Promise<void> => {
+      log(`Attempting to store "${k}"... with value length: ${v.length}`);
       return new Promise((resolve, reject) => {
         telegramCloudStorage.setItem(k, v, (error) => {
-          if (error) reject(error);
-          else resolve();
+          if (error) {
+            log(`Failed to store "${k}": ${error}`);
+            reject(error);
+          } else resolve();
         });
       });
     };
