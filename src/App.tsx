@@ -49,16 +49,19 @@ const App: React.FC = () => {
     };
 
     const storeRecursive = async (
-      subKey: CloudStorageKey,
+      baseKey: CloudStorageKey,
       subValue: CloudStorageValue,
+      chunkIndex: number = 0,
       depth: number = 0
     ): Promise<number> => {
       if (depth > maxRetries) {
         throw new Error(`Failed to store after ${maxRetries} splitting attempts`);
       }
 
+      const chunkKey = `${baseKey}_chunk_${chunkIndex}`;
+
       try {
-        await store(subKey, subValue);
+        await store(chunkKey, subValue);
         return 1; // Return 1 to count this successful chunk
       } catch (error) {
         // If storage fails, split the value and try again
@@ -66,11 +69,11 @@ const App: React.FC = () => {
         const leftHalf = subValue.slice(0, midPoint);
         const rightHalf = subValue.slice(midPoint);
 
-        const leftCount = await storeRecursive(`${subKey}:L`, leftHalf, depth + 1);
-        const rightCount = await storeRecursive(`${subKey}:R`, rightHalf, depth + 1);
+        const leftCount = await storeRecursive(baseKey, leftHalf, chunkIndex * 2 + 1, depth + 1);
+        const rightCount = await storeRecursive(baseKey, rightHalf, chunkIndex * 2 + 2, depth + 1);
 
         // Store metadata about this split
-        await store(`${subKey}:meta`, JSON.stringify({ split: true, chunks: leftCount + rightCount }));
+        await store(`${chunkKey}_meta`, JSON.stringify({ split: true, chunks: leftCount + rightCount }));
 
         return leftCount + rightCount; // Return total number of chunks created
       }
@@ -78,6 +81,7 @@ const App: React.FC = () => {
 
     try {
       const totalChunks = await storeRecursive(key, value);
+      await store(`${key}_meta`, JSON.stringify({ totalChunks }));
       log(`Successfully stored "${key}" in ${totalChunks} chunk(s)`);
       return totalChunks;
     } catch (error) {
@@ -96,31 +100,38 @@ const App: React.FC = () => {
       });
     };
 
-    const retrieveRecursive = async (subKey: CloudStorageKey): Promise<CloudStorageValue> => {
+    const retrieveRecursive = async (baseKey: CloudStorageKey, chunkIndex: number = 0): Promise<CloudStorageValue> => {
+      const chunkKey = `${baseKey}_chunk_${chunkIndex}`;
       try {
-        const metaData = await retrieve(`${subKey}:meta`);
+        const metaData = await retrieve(`${chunkKey}_meta`);
         if (metaData) {
           const { split, chunks } = JSON.parse(metaData) as { split: boolean; chunks: number };
-          log(`Retrieving ${chunks} chunks for ${subKey}`);
+          log(`Retrieving ${chunks} chunks for ${chunkKey}`);
           if (split) {
-            const leftData = await retrieveRecursive(`${subKey}:L`);
-            const rightData = await retrieveRecursive(`${subKey}:R`);
+            const leftData = await retrieveRecursive(baseKey, chunkIndex * 2 + 1);
+            const rightData = await retrieveRecursive(baseKey, chunkIndex * 2 + 2);
             return leftData + rightData;
           }
         }
         // If no metadata or not split, return the data directly
-        const data = await retrieve(subKey);
+        const data = await retrieve(chunkKey);
         if (data === undefined) {
-          throw new Error(`No data found for key ${subKey}`);
+          throw new Error(`No data found for key ${chunkKey}`);
         }
         return data;
       } catch (error) {
-        handleError(`Error retrieving chunk ${subKey}: ${error instanceof Error ? error.message : String(error)}`);
+        handleError(`Error retrieving chunk ${chunkKey}: ${error instanceof Error ? error.message : String(error)}`);
         throw error;
       }
     };
 
     try {
+      const metaData = await retrieve(`${key}_meta`);
+      if (!metaData) {
+        throw new Error(`No metadata found for key ${key}`);
+      }
+      const { totalChunks } = JSON.parse(metaData) as { totalChunks: number };
+      log(`Retrieving data for "${key}" (${totalChunks} chunks)`);
       const data = await retrieveRecursive(key);
       log(`Successfully retrieved and recombined data for "${key}"`);
       return data;
