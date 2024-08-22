@@ -83,7 +83,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Function to retrieve and recombine chunked data
   const retrieveChunkedData = async (key: CloudStorageKey): Promise<CloudStorageValue> => {
     const retrieve = (k: CloudStorageKey): Promise<CloudStorageValue | undefined> => {
       return new Promise((resolve, reject) => {
@@ -99,6 +98,7 @@ const App: React.FC = () => {
         const metaData = await retrieve(`${subKey}:meta`);
         if (metaData) {
           const { split, chunks } = JSON.parse(metaData) as { split: boolean; chunks: number };
+          log(`Retrieving ${chunks} chunks for ${subKey}`);
           if (split) {
             const leftData = await retrieveRecursive(`${subKey}:L`);
             const rightData = await retrieveRecursive(`${subKey}:R`);
@@ -151,7 +151,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Modified checkExistingWallet function
   const checkExistingWallet = async (): Promise<void> => {
     log("Checking for existing wallet...");
     try {
@@ -207,17 +206,7 @@ const App: React.FC = () => {
 
   const logout = () => {
     log("Logging out...");
-    telegramCloudStorage.removeItems(["walletId", "userShare"], (error) => {
-      if (error) {
-        handleError(`Error removing wallet data: ${error}`);
-        return;
-      }
-      setWalletId(null);
-      setUserShare(null);
-      setSignature("");
-      setIsAuthenticated(false);
-      log("Logged out successfully");
-    });
+    WebApp.close();
   };
 
   return (
