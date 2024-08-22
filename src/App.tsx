@@ -327,7 +327,7 @@ const App: React.FC = () => {
               </Button>
               {signature && <p className="mb-2">Signature: {signature}</p>}
               <div className="flex justify-between">
-                <Button onClick={logout}>Logout</Button>
+                <Button onClick={logout}>Close App</Button>
                 <Button
                   onClick={() => {
                     clearStorage();
