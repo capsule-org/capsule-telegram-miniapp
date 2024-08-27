@@ -6,4 +6,4 @@ This template provides a minimal setup to get Capsule Pre-generated wallets work
 
 First, deploy your app to a link (This repo is hosted [here](https://capsule-org.github.io/capsule-telegram-miniapp/))
 
-Then, make a telegram miniapp and point it to open this link
+Then, make a telegram bot [(See Telegram's Guide Here)](https://core.telegram.org/bots/tutorial) and point it to open this link
