@@ -5,8 +5,7 @@ import { WalletType } from "@usecapsule/web-sdk";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
-import { Alert, AlertDescription } from "./components/ui/alert";
-import { Spinner } from "./components/ui/spinner"; // Assume you have a Spinner component
+import { Spinner } from "./components/ui/spinner";
 import {
   clearChunkedStorage,
   ErrorHandler,
@@ -137,7 +136,6 @@ const App: React.FC = () => {
     }
   };
 
-  // A method that calls the clearChunkedStorage function and also resets the state
   const clearStorage = async () => {
     setIsLoading(true);
     setLoadingText("Clearing storage...");
