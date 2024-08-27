@@ -143,8 +143,6 @@ const clearChunkedStorage = async (log: LogFunction, handleError: ErrorHandler):
             else resolve();
           });
         });
-
-        log(`Cleared ${groupKeys.length} items for ${baseKey}`, "info");
       })
     );
 

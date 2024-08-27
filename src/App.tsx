@@ -138,13 +138,13 @@ const App: React.FC = () => {
 
   const clearStorage = async () => {
     setIsLoading(true);
-    setLoadingText("Clearing storage...");
+    setLoadingText("Clearing storage and resetting state...");
     try {
       await clearChunkedStorage(log, handleError);
       setUserShare(null);
       setWalletId(null);
       setIsStorageComplete(false);
-      log("Storage cleared successfully", "success");
+      log("Finished clearing storage and resetting state", "success");
     } catch (error) {
       handleError(`Error clearing storage: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
