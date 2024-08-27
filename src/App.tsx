@@ -22,7 +22,6 @@ const App: React.FC = () => {
   const [message, setMessage] = useState("");
   const [signature, setSignature] = useState("");
   const [logs, setLogs] = useState<Array<{ message: string; type: "info" | "error" | "success" }>>([]);
-  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingText, setLoadingText] = useState("");
   const [isStorageComplete, setIsStorageComplete] = useState(false);
@@ -68,10 +67,7 @@ const App: React.FC = () => {
     setLogs((prevLogs) => [...prevLogs, { message, type }]);
   };
 
-  const handleError: ErrorHandler = (errorMessage) => {
-    setError(errorMessage);
-    log(errorMessage, "error");
-  };
+  const handleError: ErrorHandler = (errorMessage) => log(errorMessage, "error");
 
   const generateWallet = async (): Promise<void> => {
     setIsLoading(true);
@@ -141,6 +137,24 @@ const App: React.FC = () => {
     }
   };
 
+  // A method that calls the clearChunkedStorage function and also resets the state
+  const clearStorage = async () => {
+    setIsLoading(true);
+    setLoadingText("Clearing storage...");
+    try {
+      await clearChunkedStorage(log, handleError);
+      setUserShare(null);
+      setWalletId(null);
+      setIsStorageComplete(false);
+      log("Storage cleared successfully", "success");
+    } catch (error) {
+      handleError(`Error clearing storage: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+      setLoadingText("");
+    }
+  };
+
   const logout = () => {
     log("Logging out...", "info");
     WebApp.close();
@@ -183,7 +197,7 @@ const App: React.FC = () => {
                   Close App
                 </Button>
                 <Button
-                  onClick={() => clearChunkedStorage(log, handleError)}
+                  onClick={clearStorage}
                   className="ml-2"
                   disabled={isLoading}>
                   Clear Storage
@@ -213,14 +227,6 @@ const App: React.FC = () => {
           )}
         </CardContent>
       </Card>
-
-      {error && (
-        <Alert
-          variant="destructive"
-          className="mt-4">
-          <AlertDescription className="break-words">{error}</AlertDescription>
-        </Alert>
-      )}
     </div>
   );
 };
