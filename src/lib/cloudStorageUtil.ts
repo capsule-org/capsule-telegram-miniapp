@@ -104,58 +104,54 @@ const retrieveChunkedData = async (
 };
 
 const clearChunkedStorage = async (log: LogFunction, handleError: ErrorHandler): Promise<void> => {
-  const getKeys = (): Promise<string[]> => {
-    return new Promise((resolve, reject) => {
+  try {
+    log("Starting storage clearance...", "info");
+
+    const keys = await new Promise<CloudStorageKey[]>((resolve, reject) => {
       telegramCloudStorage.getKeys((error, result) => {
         if (error) reject(error);
         else resolve(result || []);
       });
     });
-  };
 
-  const getItem = (key: string): Promise<string | undefined> => {
-    return new Promise((resolve, reject) => {
-      telegramCloudStorage.getItem(key, (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
-      });
+    const keyGroups: Record<string, string[]> = {};
+    keys.forEach((key) => {
+      const baseKey = key.endsWith("_meta") ? key.replace("_meta", "") : key;
+      if (!keyGroups[baseKey]) keyGroups[baseKey] = [];
+      keyGroups[baseKey].push(key);
     });
-  };
 
-  const removeItem = (key: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      telegramCloudStorage.removeItem(key, (error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
-  };
+    await Promise.all(
+      Object.entries(keyGroups).map(async ([baseKey, groupKeys]) => {
+        if (groupKeys.includes(`${baseKey}_meta`)) {
+          const metaData = await new Promise<string | undefined>((resolve, reject) => {
+            telegramCloudStorage.getItem(`${baseKey}_meta`, (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            });
+          });
 
-  try {
-    log("Starting storage clearance...", "info");
-    const keys = await getKeys();
-
-    for (const key of keys) {
-      if (key.endsWith("_meta")) {
-        const baseKey = key.replace("_meta", "");
-        const metaData = await getItem(key);
-
-        if (metaData) {
-          const { totalChunks } = JSON.parse(metaData);
-          log(`Clearing ${totalChunks} chunks for ${baseKey}...`, "info");
-
-          for (let i = 0; i < totalChunks; i++) {
-            await removeItem(`${baseKey}_chunk_${i}`);
+          if (metaData) {
+            const { totalChunks } = JSON.parse(metaData);
+            groupKeys.push(...Array.from({ length: totalChunks }, (_, i) => `${baseKey}_chunk_${i}`));
           }
         }
-      }
-      await removeItem(key);
-    }
+
+        await new Promise<void>((resolve, reject) => {
+          telegramCloudStorage.removeItems(groupKeys, (error) => {
+            if (error) reject(error);
+            else resolve();
+          });
+        });
+
+        log(`Cleared ${groupKeys.length} items for ${baseKey}`, "info");
+      })
+    );
 
     log("Storage cleared successfully", "success");
   } catch (error) {
     handleError(`Error clearing storage: ${error instanceof Error ? error.message : String(error)}`);
-    throw error; // Re-throw the error so the caller can handle it if needed
+    throw error;
   }
 };
 
