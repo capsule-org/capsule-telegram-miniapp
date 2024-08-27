@@ -208,8 +208,15 @@ const App: React.FC = () => {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex justify-between">
           <CardTitle>App Logs</CardTitle>
+          <Button
+            size={"sm"}
+            disabled={logs.length === 0}
+            variant={"secondary"}
+            onClick={() => setLogs([])}>
+            Clear Logs
+          </Button>
         </CardHeader>
         <CardContent className="overflow-auto max-h-60">
           {logs.length === 0 ? (
