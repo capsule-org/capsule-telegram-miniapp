@@ -46,12 +46,15 @@ const App: React.FC = () => {
 
       setLoadingText("Checking for existing wallet...");
       const userShare = await retrieveChunkedData("userShare", log, handleError);
+      const walletId = await retrieveChunkedData("walletId", log, handleError);
 
-      if (userShare) {
+      if (userShare && walletId) {
         setUserShare(userShare);
-        log("Existing wallet found", "success");
+        setWalletId(walletId);
+        setIsStorageComplete(true);
+        log("Wallet data retrieved successfully", "success");
       } else {
-        log("No existing wallet found", "info");
+        log("No wallet data found", "info");
       }
     } catch (error) {
       handleError(`Initialization error: ${error instanceof Error ? error.message : String(error)}`);
