@@ -208,7 +208,7 @@ const App: React.FC = () => {
       </Card>
 
       <Card>
-        <CardHeader className="flex justify-between">
+        <CardHeader className="flex justify-between flex-row">
           <CardTitle>App Logs</CardTitle>
           <Button
             size={"sm"}
