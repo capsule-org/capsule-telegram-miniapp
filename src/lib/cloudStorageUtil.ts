@@ -54,6 +54,7 @@ const storeWithChunking = async (
   };
 
   try {
+    log(`Storing "${key}"...`, "info");
     const initialChunkSize = Math.ceil(value.length / INITIAL_CHUNK_COUNT);
     const initialChunks = Array.from({ length: INITIAL_CHUNK_COUNT }, (_, i) =>
       value.slice(i * initialChunkSize, (i + 1) * initialChunkSize)
@@ -106,7 +107,6 @@ const retrieveChunkedData = async (
 const clearChunkedStorage = async (log: LogFunction, handleError: ErrorHandler): Promise<void> => {
   try {
     log("Starting storage clearance...", "info");
-
     const keys = await new Promise<CloudStorageKey[]>((resolve, reject) => {
       telegramCloudStorage.getKeys((error, result) => {
         if (error) reject(error);

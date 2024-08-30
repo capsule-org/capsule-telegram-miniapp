@@ -31,18 +31,20 @@ const App: React.FC = () => {
 
   const initializeApp = async () => {
     setIsLoading(true);
-    setLoadingText("Initializing...");
+    setLoadingText("Initializing Capsule Telegram Mini App Demo...");
+
     try {
-      WebApp.ready(); // Required by Telegram SDK
+      WebApp.ready();
 
       if (!WebApp.initDataUnsafe.user) {
-        throw new Error("User data not available");
+        throw new Error("Telegram user data not found");
       }
 
-      log("User authenticated", "success"); // Telegram user is automatically authenticated
+      log(`User authenticated: ${WebApp.initDataUnsafe.user.username}`, "success");
       setIsAuthenticated(true);
-
-      setLoadingText("Checking for existing wallet...");
+      setLoadingText(
+        `Checking user ${WebApp.initDataUnsafe.user.username}'s telegram cloud storage for existing wallet data...`
+      );
       const userShare = await retrieveChunkedData("userShare", log, handleError);
       const walletId = await retrieveChunkedData("walletId", log, handleError);
 
@@ -50,9 +52,10 @@ const App: React.FC = () => {
         setUserShare(userShare);
         setWalletId(walletId);
         setIsStorageComplete(true);
-        log("Wallet data retrieved successfully", "success");
+        log(`Wallet data found: ${walletId}`, "success");
+        await capsuleClient.setUserShare(userShare);
       } else {
-        log("No wallet data found", "info");
+        log(`No existing wallet data found for user ${WebApp.initDataUnsafe.user.username}`, "info");
       }
     } catch (error) {
       handleError(`Initialization error: ${error instanceof Error ? error.message : String(error)}`);
@@ -70,7 +73,7 @@ const App: React.FC = () => {
 
   const generateWallet = async (): Promise<void> => {
     setIsLoading(true);
-    setLoadingText("Generating wallet...");
+    setLoadingText("Generating a new wallet...");
     try {
       const username = WebApp.initDataUnsafe.user?.username;
       if (!username) throw new Error("Username not found");
@@ -81,7 +84,8 @@ const App: React.FC = () => {
       );
 
       log(`Wallet created with ID: ${pregenWallet.id}`, "success");
-      log(`Wallet Address: ${pregenWallet.address || "N/A"}`, "success");
+      log(`Wallet created with Address: ${pregenWallet.address || "N/A"}`, "success");
+
       const share = (await capsuleClient.getUserShare()) || "";
 
       // Update state immediately
@@ -89,7 +93,8 @@ const App: React.FC = () => {
       setWalletId(pregenWallet.id);
 
       // Start asynchronous storage operations
-      log("Storing wallet data in background...DO NOT CLOSE MINI APP", "info");
+      log("Storing the wallet data in users telegram cloud storage...", "info");
+      log("This may take a few seconds... please DO NOT close the mini app while this is in progress", "info");
 
       Promise.all([
         storeWithChunking("userShare", share, log, handleError),
@@ -112,19 +117,19 @@ const App: React.FC = () => {
   };
   const signMessage = async () => {
     if (!walletId || !userShare) {
-      handleError("Wallet ID or User Share not available");
+      handleError("Wallet ID or User Share not available to sign message");
       return;
     }
 
     setIsLoading(true);
-    setLoadingText("Signing message...");
+    setLoadingText(`Signing message "${message}"...`);
     try {
       await capsuleClient.setUserShare(userShare);
       const messageBase64 = btoa(message);
       const sig = await capsuleClient.signMessage(walletId, messageBase64);
 
       if ("transactionReviewUrl" in sig) {
-        throw new Error("Error signing message");
+        throw new Error(`Error: Transaction review required: ${sig.transactionReviewUrl}`);
       }
       setSignature(sig.signature);
       log(`Message signed successfully`, "success");
