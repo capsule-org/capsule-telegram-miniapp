@@ -17,10 +17,12 @@ import {
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [walletId, setWalletId] = useState<string | null>(null);
+  const [address, setAddress] = useState<string | undefined>("");
   const [userShare, setUserShare] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [signature, setSignature] = useState("");
   const [logs, setLogs] = useState<Array<{ message: string; type: "info" | "error" | "success" }>>([]);
+  const [showLogs, setShowLogs] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingText, setLoadingText] = useState("");
   const [isStorageComplete, setIsStorageComplete] = useState(false);
@@ -37,13 +39,13 @@ const App: React.FC = () => {
       WebApp.ready();
 
       if (!WebApp.initDataUnsafe.user) {
-        throw new Error("Telegram user data not found");
+        throw new Error("No User found. Please open App from Telegram");
       }
 
       log(`User authenticated: ${WebApp.initDataUnsafe.user.username}`, "success");
       setIsAuthenticated(true);
       setLoadingText(
-        `Checking user ${WebApp.initDataUnsafe.user.username}'s telegram cloud storage for existing wallet data...`
+        `Checking <b>${WebApp.initDataUnsafe.user.username}</b>'s telegram cloud storage for existing wallet data...`
       );
       const userShare = await retrieveChunkedData("userShare", log, handleError);
       const walletId = await retrieveChunkedData("walletId", log, handleError);
@@ -83,18 +85,18 @@ const App: React.FC = () => {
         `${username + crypto.randomUUID().split("-")[0]}@test.usecapsule.com`
       );
 
-      log(`Wallet created with ID: ${pregenWallet.id}`, "success");
-      log(`Wallet created with Address: ${pregenWallet.address || "N/A"}`, "success");
+      log(`Wallet created with ID: ${pregenWallet.id} and Address: ${pregenWallet.address || "N/A"}`, "success");
 
       const share = (await capsuleClient.getUserShare()) || "";
 
       // Update state immediately
       setUserShare(share);
+      setAddress(pregenWallet.address);
       setWalletId(pregenWallet.id);
 
       // Start asynchronous storage operations
       log("Storing the wallet data in users telegram cloud storage...", "info");
-      log("This may take a few seconds... please DO NOT close the mini app while this is in progress", "info");
+      log("This may take a few seconds. The wallet is now usable, but please DO NOT close the mini-app while this is in progress", "info");
 
       Promise.all([
         storeWithChunking("userShare", share, log, handleError),
@@ -165,28 +167,44 @@ const App: React.FC = () => {
 
   return (
     <div className="container mx-auto p-4">
+      <div className="header">
+        <Button variant={"link"}>
+          <a href="https://usecapsule.com" target="_blank">Capsule</a>
+        </Button>
+        <Button variant={"link"}>
+          <a href="https://docs.usecapsule.com" target="_blank">Docs</a>
+        </Button>
+        <Button variant={"link"}>
+          <a href="https://developer.usecapsule.com" target="_blank">Get Access</a>
+        </Button>
+      </div>
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle>{isAuthenticated ? "Wallet Manager" : "Welcome to Capsule Wallet"}</CardTitle>
+          <CardTitle>{isAuthenticated ? "Wallet Manager" : "Capsule TG App Example"}</CardTitle>
         </CardHeader>
         <CardContent className="overflow-hidden">
           {!isAuthenticated ? (
             <p>Authenticating...</p>
           ) : !walletId ? (
-            <Button
-              onClick={generateWallet}
-              disabled={isLoading}>
-              {isLoading ? <Spinner /> : "Generate Wallet"}
-            </Button>
+            <div className="flex justify-between">
+              <Button
+                onClick={generateWallet}
+                disabled={isLoading}>
+                {isLoading ? <Spinner /> : "Create New Wallet"}
+              </Button>
+              <p></p>
+            </div>
           ) : (
             <>
+              <p>{`Wallet Address: ${address}`}</p>
               <Input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Enter message to sign"
-                className="mb-2"
+                placeholder="Message to sign"
+                className="mb-2 bg-card"
               />
               <Button
+                variant={"outline"}
                 onClick={signMessage}
                 className="mb-2"
                 disabled={isLoading || !message}>
@@ -195,6 +213,7 @@ const App: React.FC = () => {
               {signature && <p className="mb-2 break-all">Signature: {signature}</p>}
               <div className="flex justify-between">
                 <Button
+                  variant={"outline"}
                   onClick={logout}
                   disabled={!isStorageComplete}>
                   Close App
@@ -217,25 +236,37 @@ const App: React.FC = () => {
           <CardTitle>App Logs</CardTitle>
           <Button
             size={"sm"}
+            variant={"outline"}
+            onClick={() => setShowLogs(!showLogs)}>
+            {showLogs ? 'Hide' : 'Show'}
+          </Button>
+          <Button
+            size={"sm"}
             disabled={logs.length === 0}
-            variant={"secondary"}
+            variant={"outline"}
             onClick={() => setLogs([])}>
-            Clear Logs
+            Clear
           </Button>
         </CardHeader>
         <CardContent className="overflow-auto max-h-60">
-          {logs.length === 0 ? (
-            <p>No logs yet.</p>
-          ) : (
-            logs.map((log, index) => (
-              <p
-                key={index}
-                className={`${log.type === "error" ? "text-red-500" : log.type === "success" ? "text-green-500" : ""}`}>
-                {log.message}
-              </p>
-            ))
-          )}
-        </CardContent>
+          <p>Wallet Stored: {isLoading ? (userShare ? `In Progress` : `❌`) : `✅`}</p>
+          <p>Wallet Fetched: {isStorageComplete ? (userShare ? `In Progress` : `❌`) : `✅`}</p>
+          <div className="font-mono text-[12px]">
+            {!!showLogs && (
+              logs.length === 0 ? (
+                <p>No logs yet.</p>
+              ) : (
+                logs.map((log, index) => (
+                  <p
+                    key={index}
+                    className={`${log.type === "error" ? "text-red-500" : log.type === "success" ? "text-green-500" : ""}`}>
+                    {log.message}
+                  </p>
+                ))
+              ))
+            }
+          </div>
+          </CardContent>
       </Card>
     </div>
   );
