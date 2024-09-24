@@ -45,7 +45,7 @@ const App: React.FC = () => {
       log(`User authenticated: ${WebApp.initDataUnsafe.user.username}`, "success");
       setIsAuthenticated(true);
       setLoadingText(
-        `Checking <b>${WebApp.initDataUnsafe.user.username}</b>'s telegram cloud storage for existing wallet data...`
+        `Checking ${WebApp.initDataUnsafe.user.username}'s telegram cloud storage for existing wallet data...`
       );
       const userShare = await retrieveChunkedData("userShare", log, handleError);
       const walletId = await retrieveChunkedData("walletId", log, handleError);
@@ -177,6 +177,12 @@ const App: React.FC = () => {
         <Button variant={"link"}>
           <a href="https://developer.usecapsule.com" target="_blank">Get Access</a>
         </Button>
+        <Button
+          variant={"link"}
+          onClick={logout}
+          disabled={!isStorageComplete}>
+          ❌ Close App
+        </Button>
       </div>
       <Card className="mb-4">
         <CardHeader>
@@ -196,7 +202,7 @@ const App: React.FC = () => {
             </div>
           ) : (
             <>
-              <p>{`Wallet Address: ${address}`}</p>
+              <p className="text-[12px]">{`Wallet Address: ${address}`}</p>
               <Input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -211,13 +217,7 @@ const App: React.FC = () => {
                 {isLoading ? <Spinner /> : "Sign Message"}
               </Button>
               {signature && <p className="mb-2 break-all">Signature: {signature}</p>}
-              <div className="flex justify-between">
-                <Button
-                  variant={"outline"}
-                  onClick={logout}
-                  disabled={!isStorageComplete}>
-                  Close App
-                </Button>
+              <div>
                 <Button
                   onClick={clearStorage}
                   className="ml-2"
@@ -249,8 +249,8 @@ const App: React.FC = () => {
           </Button>
         </CardHeader>
         <CardContent className="overflow-auto max-h-60">
-          <p>Wallet Stored: {isLoading ? (userShare ? `In Progress` : `❌`) : `✅`}</p>
-          <p>Wallet Fetched: {isStorageComplete ? (userShare ? `In Progress` : `❌`) : `✅`}</p>
+          <p>{userShare ? (isStorageComplete ? `Wallet Stored: ✅` : `Wallet Stored: In Progress`) : ``}</p>
+          <p>{userShare ? (isLoading ? `Wallet Fetched: In Progress` : `Wallet Fetched: ✅`) : ``}</p>
           <div className="font-mono text-[12px]">
             {!!showLogs && (
               logs.length === 0 ? (
