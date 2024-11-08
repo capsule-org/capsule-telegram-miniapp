@@ -3,13 +3,12 @@ import { CloudStorageKey, CloudStorageValue, telegramCloudStorage } from "./tele
 const INITIAL_CHUNK_COUNT = 32;
 const MAX_RETRIES = 256;
 
-export type LogFunction = (message: string, type: "info" | "error" | "success") => void;
+export type LogFunction = (message: string) => void;
 export type ErrorHandler = (errorMessage: string) => void;
 
 const storeWithChunking = async (
   key: CloudStorageKey,
   value: CloudStorageValue,
-  log: LogFunction,
   handleError: ErrorHandler
 ): Promise<number> => {
   const store = (k: CloudStorageKey, v: CloudStorageValue): Promise<void> => {
@@ -54,7 +53,6 @@ const storeWithChunking = async (
   };
 
   try {
-    log(`Storing "${key}"...`, "info");
     const initialChunkSize = Math.ceil(value.length / INITIAL_CHUNK_COUNT);
     const initialChunks = Array.from({ length: INITIAL_CHUNK_COUNT }, (_, i) =>
       value.slice(i * initialChunkSize, (i + 1) * initialChunkSize)
@@ -62,7 +60,6 @@ const storeWithChunking = async (
 
     const totalChunks = await storeChunks(key, initialChunks);
     await store(`${key}_meta`, JSON.stringify({ totalChunks }));
-    log(`Successfully stored "${key}" in ${totalChunks} chunks`, "success");
     return totalChunks;
   } catch (error) {
     handleError(`Failed to store "${key}": ${error instanceof Error ? error.message : String(error)}`);
@@ -74,7 +71,7 @@ const retrieveChunkedData = async (
   key: CloudStorageKey,
   log: LogFunction,
   handleError: ErrorHandler
-): Promise<CloudStorageValue> => {
+): Promise<CloudStorageValue | undefined> => {
   const retrieve = (k: CloudStorageKey): Promise<CloudStorageValue | undefined> => {
     return new Promise((resolve, reject) => {
       telegramCloudStorage.getItem(k, (error, result) => {
@@ -86,16 +83,24 @@ const retrieveChunkedData = async (
 
   try {
     const metaData = await retrieve(`${key}_meta`);
+
     if (!metaData) {
-      throw new Error(`No metadata found for key ${key}`);
+      return undefined;
     }
     const { totalChunks } = JSON.parse(metaData) as { totalChunks: number };
-    log(`Retrieving data for "${key}" (${totalChunks} chunks)`, "info");
+    log(`Retrieving data for "${key}" (${totalChunks} chunks)`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
-    const chunks = await Promise.all(Array.from({ length: totalChunks }, (_, i) => retrieve(`${key}_chunk_${i}`)));
+    const chunks = await Promise.all(
+      Array.from({ length: totalChunks }, async (_, i) => {
+        const chunk = await retrieve(`${key}_chunk_${i}`);
+        return chunk || "";
+      })
+    );
 
     const data = chunks.join("");
-    log(`Successfully retrieved and recombined data for "${key}"`, "success");
+    log(`Successfully retrieved and recombined data for "${key}"`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     return data;
   } catch (error) {
@@ -106,7 +111,8 @@ const retrieveChunkedData = async (
 
 const clearChunkedStorage = async (log: LogFunction, handleError: ErrorHandler): Promise<void> => {
   try {
-    log("Starting storage clearance...", "info");
+    log("Starting storage clearance...");
+    await new Promise((resolve) => setTimeout(resolve, 500));
     const keys = await new Promise<CloudStorageKey[]>((resolve, reject) => {
       telegramCloudStorage.getKeys((error, result) => {
         if (error) reject(error);
@@ -146,7 +152,8 @@ const clearChunkedStorage = async (log: LogFunction, handleError: ErrorHandler):
       })
     );
 
-    log("Storage cleared successfully", "success");
+    log("Storage cleared successfully");
+    await new Promise((resolve) => setTimeout(resolve, 500));
   } catch (error) {
     handleError(`Error clearing storage: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
