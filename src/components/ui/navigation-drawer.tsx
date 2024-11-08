@@ -69,7 +69,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ isOpen, onOp
                 className="bg-muted text-muted-foreground hover:bg-muted/90 transition-colors duration-200"
                 asChild>
                 <a
-                  href="https://twitter.com"
+                  href="https://x.com/usecapsule"
                   target="_blank"
                   rel="noopener noreferrer">
                   <Twitter className="h-4 w-4" />
@@ -82,23 +82,10 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ isOpen, onOp
                 className="bg-muted text-muted-foreground hover:bg-muted/90 transition-colors duration-200"
                 asChild>
                 <a
-                  href="https://github.com"
+                  href="https://github.com/capsule-org/examples-hub"
                   target="_blank"
                   rel="noopener noreferrer">
                   <Github className="h-4 w-4" />
-                </a>
-              </Button>
-
-              <Button
-                variant="outline"
-                size="icon"
-                className="bg-muted text-muted-foreground hover:bg-muted/90 transition-colors duration-200"
-                asChild>
-                <a
-                  href="https://telegram.org"
-                  target="_blank"
-                  rel="noopener noreferrer">
-                  <MessageCircle className="h-4 w-4" />
                 </a>
               </Button>
             </div>
