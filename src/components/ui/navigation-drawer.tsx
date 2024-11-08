@@ -1,7 +1,7 @@
 import React from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "./sheet";
 import { Button } from "./button";
-import { Database, ExternalLink, Github, LogOut, Menu, MessageCircle, Twitter } from "lucide-react";
+import { Database, ExternalLink, Github, LogOut, Menu, Twitter } from "lucide-react";
 import WebApp from "@twa-dev/sdk";
 import { clearChunkedStorage } from "../../lib/cloudStorageUtil";
 import capsuleClient from "../../lib/capsuleClient";
